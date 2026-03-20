@@ -11,28 +11,78 @@
     --accent-hover: #3570d4;
     --border: #23262f;
     --card: #23262f;
-    --input-bg: #23262f;
-    --input-fg: #f1f1f1;
-    --input-border: #353945;
-    --button-bg: var(--accent);
-    --button-fg: #fff;
-    --button-disabled: #3a3f4b;
-    --button-hover: var(--accent-hover);
+    --folder: #25314f;
+    --folder-hover: #34508a;
+    --video: #23262f;
+    --video-hover: #2d3444;
     --shadow: 0 2px 16px 0 rgba(0,0,0,0.25);
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
 }
 
 body {
     background: var(--bg);
     color: var(--fg);
-    font-family: Arial;
+    font-family: Arial, sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
+    min-height: 100vh;
 }
 
 h2 {
     color: var(--accent);
     margin-top: 40px;
+    margin-bottom: 8px;
+}
+
+#pathbar {
+    margin-top: 10px;
+    color: #b8c0cc;
+    font-size: 14px;
+    max-width: 90vw;
+    word-break: break-all;
+    text-align: center;
+}
+
+#controls {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: 0.2s;
+    box-shadow: var(--shadow);
+    font-size: 14px;
+}
+
+button:hover {
+    background: var(--accent-hover);
+}
+
+button:disabled {
+    background: #3a3f4b;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+#status {
+    margin-top: 14px;
+    color: #aab2bf;
+    font-size: 14px;
+    min-height: 20px;
 }
 
 #list {
@@ -40,78 +90,263 @@ h2 {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    width: min(900px, 92vw);
+    padding-bottom: 30px;
 }
 
 .item {
-    background: var(--card);
     padding: 12px 18px;
-    border-radius: 10px;
+    border-radius: 12px;
     cursor: pointer;
     transition: 0.2s;
+    box-shadow: var(--shadow);
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
 }
 
-.item:hover {
-    background: var(--accent);
+.item .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item .kind {
+    font-size: 12px;
+    opacity: 0.8;
+    flex: 0 0 auto;
+}
+
+.folder {
+    background: var(--folder);
+}
+
+.folder:hover {
+    background: var(--folder-hover);
+}
+
+.video-item {
+    background: var(--video);
+}
+
+.video-item:hover {
+    background: var(--video-hover);
 }
 
 video {
     margin-top: 20px;
-    width: 80%;
+    width: min(900px, 92vw);
     max-width: 900px;
     border-radius: 12px;
     display: none;
+    box-shadow: var(--shadow);
+    background: #000;
+}
+
+#empty {
+    display: none;
+    color: #aab2bf;
+    margin-top: 18px;
+    font-size: 14px;
+}
+
+@media (max-width: 700px) {
+    h2 {
+        margin-top: 28px;
+        font-size: 24px;
+    }
+
+    .item {
+        padding: 12px 14px;
+    }
+
+    button {
+        padding: 9px 14px;
+    }
 }
 </style>
 </head>
 <body>
 
 <h2>videos</h2>
+<div id="pathbar">videos</div>
+<div id="controls">
+    <button id="backbtn" disabled>back</button>
+</div>
+<div id="status"></div>
 <div id="list"></div>
+<div id="empty">nothing here yet</div>
 <video id="player" controls></video>
 
 <script>
 const list = document.getElementById("list")
 const player = document.getElementById("player")
+const statusBox = document.getElementById("status")
+const emptyBox = document.getElementById("empty")
+const pathbar = document.getElementById("pathbar")
+const backbtn = document.getElementById("backbtn")
+
+const repoOwner = "floofuwuer-wq"
+const repoName = "floofyvideos"
+const rootFolder = "videos"
 
 const videoExts = [
-".mp4",".webm",".ogg",".mov",".mkv",".avi",".wmv",".flv",".m4v",".3gp",".3g2"
+    ".mp4",
+    ".webm",
+    ".ogg",
+    ".mov",
+    ".mkv",
+    ".avi",
+    ".wmv",
+    ".flv",
+    ".m4v",
+    ".3gp",
+    ".3g2"
 ]
 
-fetch("https://api.github.com/repos/floofuwuer-wq/floofyvideos/contents/videos")
-.then(r=>r.json())
-.then(files=>{
-    files.forEach(f=>{
-        if(!f.name) return
+let pathStack = []
 
-        const nameLower = f.name.toLowerCase()
-        if(!videoExts.some(ext=>nameLower.endsWith(ext))) return
+function isVideoFile(name) {
+    const lower = String(name || "").toLowerCase()
+    return videoExts.some(ext => lower.endsWith(ext))
+}
 
-        const cleanName = f.name.replace(/\.[^/.]+$/, "")
+function niceName(name) {
+    return String(name || "").replace(/\.[^/.]+$/, "")
+}
 
-        const d = document.createElement("div")
-        d.className = "item"
-        d.innerText = cleanName
+function currentPath() {
+    return pathStack.length ? `${rootFolder}/${pathStack.join("/")}` : rootFolder
+}
 
-        d.onclick = ()=>{
-            player.style.display = "block"
-            player.src = f.download_url
+function showPath() {
+    pathbar.textContent = currentPath()
+    backbtn.disabled = pathStack.length === 0
+}
 
-            player.load()
+async function loadFolder() {
+    const path = currentPath()
+    statusBox.textContent = "loading"
+    list.innerHTML = ""
+    emptyBox.style.display = "none"
 
-            const tryPlay = player.play()
-            if(tryPlay !== undefined){
-                tryPlay.catch(()=>{
-                    window.open(f.download_url, "_blank")
-                })
+    try {
+        const url = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${path}`
+        const res = await fetch(url)
+
+        if (!res.ok) {
+            throw new Error(`github api failed ${res.status}`)
+        }
+
+        const items = await res.json()
+
+        if (!Array.isArray(items)) {
+            throw new Error("bad github response")
+        }
+
+        const folders = []
+        const videos = []
+
+        for (const item of items) {
+            if (!item || !item.name) continue
+            if (item.type === "dir") {
+                folders.push(item)
+                continue
+            }
+            if (item.type === "file" && isVideoFile(item.name)) {
+                videos.push(item)
             }
         }
 
-        list.appendChild(d)
-    })
-})
-.catch(e=>{
-    console.log("rip loading vids", e)
-})
+        folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+        videos.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+
+        const combined = [...folders, ...videos]
+
+        if (combined.length === 0) {
+            emptyBox.style.display = "block"
+            statusBox.textContent = "done"
+            showPath()
+            return
+        }
+
+        for (const item of folders) {
+            const d = document.createElement("div")
+            d.className = "item folder"
+
+            const name = document.createElement("div")
+            name.className = "name"
+            name.textContent = item.name
+
+            const kind = document.createElement("div")
+            kind.className = "kind"
+            kind.textContent = "folder"
+
+            d.appendChild(name)
+            d.appendChild(kind)
+
+            d.onclick = () => {
+                pathStack.push(item.name)
+                showPath()
+                loadFolder()
+            }
+
+            list.appendChild(d)
+        }
+
+        for (const item of videos) {
+            const d = document.createElement("div")
+            d.className = "item video-item"
+
+            const name = document.createElement("div")
+            name.className = "name"
+            name.textContent = niceName(item.name)
+
+            const kind = document.createElement("div")
+            kind.className = "kind"
+            kind.textContent = "video"
+
+            d.appendChild(name)
+            d.appendChild(kind)
+
+            d.onclick = () => {
+                player.style.display = "block"
+                player.src = item.download_url
+                player.load()
+
+                const tryPlay = player.play()
+                if (tryPlay !== undefined) {
+                    tryPlay.catch(() => {
+                        window.open(item.download_url, "_blank")
+                    })
+                }
+            }
+
+            list.appendChild(d)
+        }
+
+        statusBox.textContent = "done"
+        showPath()
+    } catch (e) {
+        console.log("rip loading vids", e)
+        statusBox.textContent = "failed to load"
+        emptyBox.style.display = "block"
+        emptyBox.textContent = "failed to load folder"
+        showPath()
+    }
+}
+
+backbtn.onclick = () => {
+    if (!pathStack.length) return
+    pathStack.pop()
+    showPath()
+    loadFolder()
+}
+
+showPath()
+loadFolder()
 </script>
 
 </body>
