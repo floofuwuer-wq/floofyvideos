@@ -73,20 +73,37 @@ video {
 const list = document.getElementById("list")
 const player = document.getElementById("player")
 
+const videoExts = [
+".mp4",".webm",".ogg",".mov",".mkv",".avi",".wmv",".flv",".m4v",".3gp",".3g2"
+]
+
 fetch("https://api.github.com/repos/NotFloofy/floofyvideos/contents/videos")
 .then(r=>r.json())
 .then(files=>{
     files.forEach(f=>{
-        if(!f.name || !f.name.endsWith(".mp4")) return
+        if(!f.name) return
+
+        const nameLower = f.name.toLowerCase()
+        if(!videoExts.some(ext=>nameLower.endsWith(ext))) return
+
+        const cleanName = f.name.replace(/\.[^/.]+$/, "")
 
         const d = document.createElement("div")
         d.className = "item"
-        d.innerText = f.name
+        d.innerText = cleanName
 
         d.onclick = ()=>{
             player.style.display = "block"
             player.src = f.download_url
-            player.play().catch(()=>{})
+
+            player.load()
+
+            const tryPlay = player.play()
+            if(tryPlay !== undefined){
+                tryPlay.catch(()=>{
+                    window.open(f.download_url, "_blank")
+                })
+            }
         }
 
         list.appendChild(d)
